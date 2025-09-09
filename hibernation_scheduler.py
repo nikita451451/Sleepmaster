@@ -9,6 +9,7 @@ import json
 import time
 from PIL import Image
 import webbrowser
+import queue
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -25,13 +26,22 @@ ACTIONS = ["Выключить", "Сон", "Гибернация", "Переза
 class TimeMasterApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        
+        # Состояние приложения
+        self.scheduler_active = True
+        self.is_fullscreen = False
+        self.message_queue = queue.Queue()
+        
+        # Настройка окна
         self.title(f"{APP_NAME} v{APP_VERSION}")
         self.geometry("1050x750")
         self.minsize(950, 650)
         
-        # Состояние приложения
-        self.scheduler_active = True
-        self.current_theme = "dark"
+        # Центрирование
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() - 1050) // 2
+        y = (self.winfo_screenheight() - 750) // 4
+        self.geometry(f"1050x750+{x}+{y}")
         
         # Иконка
         self.setup_icon()
@@ -45,8 +55,8 @@ class TimeMasterApp(ctk.CTk):
         # Запуск планировщика
         self.start_scheduler()
         
-        # Обработка закрытия
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # Запуск обработки сообщений
+        self.process_messages()
         
         # Обновление времени
         self.update_time()
@@ -100,7 +110,7 @@ class TimeMasterApp(ctk.CTk):
 
     def create_ui(self):
         """Создание пользовательского интерфейса"""
-        # Главное окно
+        # Главный контейнер
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         
@@ -130,15 +140,15 @@ class TimeMasterApp(ctk.CTk):
         self.tabview.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
         
         # Вкладка расписания
-        self.schedule_tab = self.tabview.add("Расписание")
+        self.schedule_tab = self.tabview.add("📅 Расписание")
         self.create_schedule_ui()
         
         # Вкладка автозапуска
-        self.programs_tab = self.tabview.add("Автозапуск")
+        self.programs_tab = self.tabview.add("🚀 Автозапуск")
         self.create_programs_ui()
         
         # Вкладка настроек
-        self.settings_tab = self.tabview.add("Настройки")
+        self.settings_tab = self.tabview.add("⚙️ Настройки")
         self.create_settings_ui()
         
         # Статус бар
@@ -161,7 +171,7 @@ class TimeMasterApp(ctk.CTk):
         
         self.apply_btn = ctk.CTkButton(
             button_frame,
-            text="Применить изменения",
+            text="💾 Применить изменения",
             command=self.apply_changes,
             width=200,
             height=40,
@@ -173,7 +183,7 @@ class TimeMasterApp(ctk.CTk):
         
         self.now_btn = ctk.CTkButton(
             button_frame,
-            text="Выполнить сейчас",
+            text="⚡ Выполнить сейчас",
             command=self.execute_now,
             width=180,
             height=40,
@@ -281,7 +291,7 @@ class TimeMasterApp(ctk.CTk):
             # Кнопка копирования
             copy_btn = ctk.CTkButton(
                 table_frame,
-                text=f"К → Все",
+                text=f"📋 → Все",
                 command=lambda d=day: self.copy_day_settings(d),
                 width=70,
                 height=30,
@@ -295,21 +305,21 @@ class TimeMasterApp(ctk.CTk):
         
         ctk.CTkButton(
             table_ctrl_frame,
-            text="Активировать все дни",
+            text="✅ Активировать все дни",
             command=lambda: self.set_all_days(True),
             width=170
         ).pack(side="left", padx=5)
         
         ctk.CTkButton(
             table_ctrl_frame,
-            text="Отменить все дни",
+            text="❌ Отменить все дни",
             command=lambda: self.set_all_days(False),
             width=170
         ).pack(side="left", padx=5)
         
         ctk.CTkButton(
             table_ctrl_frame,
-            text="Сброс расписания",
+            text="🔄 Сброс расписания",
             command=self.reset_schedule,
             width=170,
             fg_color="#e74c3c",
@@ -398,14 +408,14 @@ class TimeMasterApp(ctk.CTk):
         
         ctk.CTkButton(
             btn_frame,
-            text="+ Добавить программу",
+            text="➕ Добавить программу",
             command=self.add_program,
             width=200
         ).pack(side="left", padx=5)
         
         ctk.CTkButton(
             btn_frame,
-            text="Удалить выделенные",
+            text="🗑️ Удалить выделенные",
             command=self.remove_programs,
             width=200,
             fg_color="#e74c3c",
@@ -426,7 +436,7 @@ class TimeMasterApp(ctk.CTk):
         
         btn = ctk.CTkButton(
             frame,
-            text="Показать",
+            text="📂 Показать",
             command=lambda p=program_path: webbrowser.open(os.path.dirname(p)),
             width=80,
             height=25,
@@ -524,15 +534,15 @@ class TimeMasterApp(ctk.CTk):
         )
         notify_switch.pack(anchor="w", pady=5)
         
-        # Предупреждения перед действием
+        # Предуреждающие уведомления
         self.warn_before = ctk.BooleanVar(value=True)
-        notify_switch = ctk.CTkSwitch(
+        warn_switch = ctk.CTkSwitch(
             notify_frame,
-            text="Показывать предупреждение за 10 минут",
+            text="Предупреждение за 10 минут до действия",
             variable=self.warn_before,
             font=("Arial", 14)
         )
-        notify_switch.pack(anchor="w", pady=15)
+        warn_switch.pack(anchor="w", pady=15)
 
     def create_advanced_settings(self, tab):
         """Дополнительные настройки"""
@@ -603,13 +613,12 @@ class TimeMasterApp(ctk.CTk):
                     self.execute_action(schedule.get("action", "Сон"))
                     
                 # Проверка на время включения
-                # На самом деле включение должно настраиваться в BIOS
                 on_time = schedule.get("on_time")
                 if on_time and on_time == current_time:
                     self.status_var.set("☀️ По расписанию: Время включения ПК")
             
     def execute_action(self, action):
-        """Выполнение действия согласно расписанию"""
+        """Выполнение действия согласно расписания"""
         action_map = {
             "Выключить": "shutdown /s /f /t 0",
             "Сон": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
@@ -626,6 +635,18 @@ class TimeMasterApp(ctk.CTk):
                 self.status_var.set(f"⚠️ Ошибка выполнения: {action}")
         else:
             self.status_var.set(f"⚠️ Поддержка действий доступна только в Windows")
+
+    def process_messages(self):
+        """Обработка сообщений из очереди"""
+        try:
+            while not self.message_queue.empty():
+                message = self.message_queue.get_nowait()
+                self.status_var.set(message)
+        except queue.Empty:
+            pass
+        
+        if self.winfo_exists():
+            self.after(100, self.process_messages)
 
     def update_time(self):
         """Обновление статусбара с текущим временем"""
@@ -657,34 +678,34 @@ class TimeMasterApp(ctk.CTk):
 
     def execute_now(self):
         """Выполнение действия немедленно"""
-        actions = ["Выключить", "Сон", "Гибернация", "Перезагрузка", "Завершить процессы"]
-        selected_action = ctk.CTkComboBox(
-            self,
-            values=actions,
-            width=200
-        )
-        
         dialog = ctk.CTkToplevel(self)
-        dialog.title("Выберите действие")
+        dialog.title("Немедленное выполнение")
         dialog.geometry("400x200")
         dialog.transient(self)
         dialog.grab_set()
         
+        # Используем grid для диалогового окна
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+        
         ctk.CTkLabel(
             dialog,
-            text="Немедленное выполнение:",
+            text="Выберите действие для выполнения:",
             font=("Arial", 16)
-        ).pack(pady=20)
+        ).grid(row=0, column=0, pady=20, padx=20, sticky="w")
         
-        selected_action.pack(pady=10)
+        selected_action = ctk.StringVar(value="Выключить")
+        action_combo = ctk.CTkComboBox(
+            dialog,
+            variable=selected_action,
+            values=["Выключить", "Сон", "Гибернация", "Перезагрузка"],
+            width=200
+        )
+        action_combo.grid(row=1, column=0, pady=10, padx=20, sticky="ew")
         
         def confirm():
             action = selected_action.get()
-            if action == "Завершить процессы":
-                # В реальной программе здесь была бы логика завершения процессов
-                self.status_var.set(f"⚡ Завершение процессов")
-            else:
-                self.execute_action(action)
+            self.execute_action(action)
             dialog.destroy()
         
         ctk.CTkButton(
@@ -694,7 +715,7 @@ class TimeMasterApp(ctk.CTk):
             width=150,
             height=40,
             fg_color="#e67e22"
-        ).pack(pady=15)
+        ).grid(row=2, column=0, pady=15)
 
     def on_closing(self):
         """Обработка закрытия приложения"""
