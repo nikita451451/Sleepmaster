@@ -1,33 +1,43 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+# Установщик для Linux
 
-# Проверка прав root
-if [ "$(id -u)" -ne 0 ]; then
-    echo "Запуск с правами root..."
-    exec sudo "$0" "$@"
+APP_NAME="SleepScheduler"
+INSTALL_DIR="/opt/$APP_NAME"
+BIN_PATH="/usr/local/bin/sleep-scheduler"
+DESKTOP_FILE="/usr/share/applications/sleep-scheduler.desktop"
+
+# Проверка прав
+if [ "$EUID" -ne 0 ]; then
+    echo "Запуск с правами sudo!"
+    exec sudo "$0"
+    exit
 fi
 
-# Установка зависимостей
-apt update
-apt install -y python3 python3-tk python3-pip python3-venv
+# Создать папки
+mkdir -p $INSTALL_DIR
 
-# Создание венвирутального окружения
-python3 -m venv venv
-source venv/bin/activate
-pip install customtkinter pyinstaller pillow
+# Копировать файлы
+cp hibernation_scheduler_linux.py "$INSTALL_DIR/"
+cp sleep_scheduler.png "$INSTALL_DIR/" 2>/dev/null || true
 
-# Сборка приложения
-pyinstaller sleep_scheduler.spec
+# Установщик зависимостей
+apt install -y python3-pip python3-tk
+pip3 install customtkinter pillow
 
-# Установка в систему
-INSTALL_DIR="/opt/SleepScheduler"
-mkdir -p "$INSTALL_DIR"
-cp dist/SleepScheduler/* "$INSTALL_DIR/"
-
-# Создание команды запуска
+# Создать скрипт запуска
 echo '#!/bin/sh
 cd /opt/SleepScheduler
-./SleepScheduler' > /usr/local/bin/sleep-scheduler
-chmod +x /usr/local/bin/sleep-scheduler
+exec sudo python3 hibernation_scheduler_linux.py' > $BIN_PATH
+chmod +x $BIN_PATH
 
-echo "Установка завершена! Запуск: sleep-scheduler"
+# Создать ярлык .desktop
+echo "[Desktop Entry]
+Name=Sleep Scheduler
+Comment=Планировщик управления питанием
+Exec=$BIN_PATH
+Icon=$INSTALL_DIR/sleep_scheduler.png
+Terminal=false
+Type=Application
+Categories=Utility;" > $DESKTOP_FILE
+
+echo "Установлена! Используйте команду: sleep-scheduler"
