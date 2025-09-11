@@ -47,3 +47,5 @@ Categories=Utility;" | sudo tee /usr/share/applications/sleep-scheduler.desktop 
 # 10. Завершение
 deactivate
 echo "Установка завершена! Запустите командой: sleep-scheduler"
+
+sudo apt install -y python3 python3-pip python3-tk python3-dev libxcb-xinerama0

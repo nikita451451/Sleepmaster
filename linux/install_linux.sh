@@ -1,61 +1,59 @@
 #!/bin/bash
-# Universal Installer for Linux
-
 echo "┌─────────────────────────────────────────┐"
 echo "│ Установка Sleep Scheduler для Linux     │"
 echo "└─────────────────────────────────────────┘"
 
-# Проверка прав
 if [ "$EUID" -ne 0 ]; then
-    echo "> Этот скрипт требует прав администратора."
-    echo "> Пожалуйста, запустите через sudo:"
-    echo -e "\033[1;31m  sudo $0\033[0m"
-    exit 1
+    exec sudo "$0"
+    exit
 fi
 
-# Параметры установки
 APP_NAME="SleepScheduler"
 INSTALL_DIR="/opt/$APP_NAME"
 BIN_PATH="/usr/local/bin/sleep-scheduler"
 DESKTOP_FILE="/usr/share/applications/sleep-scheduler.desktop"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Установка зависимостей
 echo "> Установка системных зависимостей..."
-apt update -y
-apt install -y \
+sudo apt update -y
+sudo apt install -y \
     python3 \
     python3-pip \
     python3-tk \
-    python3-pil \
+    python3-pil.imagetk \
     policykit-1 \
-    libxcb-xinerama0
+    libxcb-xinerama0 \
+    imagemagick
 
-# Создание директории приложения
 echo "> Создание директорий..."
-mkdir -p "$INSTALL_DIR"
-chmod 755 "$INSTALL_DIR"
+sudo mkdir -p "$INSTALL_DIR"
+sudo chmod 755 "$INSTALL_DIR"
 
-# Копирование файлов
 echo "> Копирование файлов..."
-cp hibernation_scheduler_linux.py "$INSTALL_DIR/"
-cp sleep_scheduler.png "$INSTALL_DIR/"
+sudo cp "$SCRIPT_DIR/hibernation_scheduler_linux.py" "$INSTALL_DIR/"
 
-# Установка Python-зависимостей
-echo "> Установка pip-пакетов..."
-pip3 install customtkinter pillow
+# Создаём иконку, если её нет
+if [ -f "$SCRIPT_DIR/sleep_scheduler.png" ]; then
+    sudo cp "$SCRIPT_DIR/sleep_scheduler.png" "$INSTALL_DIR/"
+else
+    echo "Создание временной иконки..."
+    sudo convert -size 256x256 xc:#1e88e5 \
+        -fill '#0d47a1' -draw 'circle 128,128 90,200' \
+        "$INSTALL_DIR/sleep_scheduler.png"
+fi
 
-# Создание исполняемого файла
-echo "> Создание скрипта запуска..."
-tee "$BIN_PATH" > /dev/null << EOF
+echo "> Установка Python-зависимостей..."
+sudo -H pip3 install customtkinter pillow
+
+echo "> Создание скриптов..."
+sudo tee "$BIN_PATH" > /dev/null << EOF
 #!/bin/bash
-cd "$INSTALL_DIR"
+cd /opt/SleepScheduler
 exec pkexec python3 hibernation_scheduler_linux.py "\$@"
 EOF
-chmod +x "$BIN_PATH"
+sudo chmod +x "$BIN_PATH"
 
-# Создание .desktop файла
-echo "> Создание ярлыка приложения..."
-tee "$DESKTOP_FILE" > /dev/null << EOF
+sudo tee "$DESKTOP_FILE" > /dev/null << EOF
 [Desktop Entry]
 Name=Sleep Scheduler
 Comment=Планировщик управления питанием
@@ -64,23 +62,8 @@ Icon=$INSTALL_DIR/sleep_scheduler.png
 Terminal=false
 Type=Application
 Categories=Utility;
-Keywords=power;sleep;scheduler;
 EOF
 
-# Настройка разрешений
-echo "> Настройка прав доступа..."
-chown -R root:root "$INSTALL_DIR"
-chmod 755 "$BIN_PATH"
-
-echo -e "\033[1;32m
-Установка успешно завершена!
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Команда для запуска: 
-  $ sleep-scheduler
-
-Или найдите \"Sleep Scheduler\" в меню приложений
-
-При первом запуске потребуется ввести пароль
-для предоставления прав администратора
-\033[0m"
+echo -e "\033[1;32mУспешно установлено!\033[0m"
+echo "Запуск: sleep-scheduler"
+echo "Или через меню приложений"
